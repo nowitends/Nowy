@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Atraktor Lorenza 3D</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #020617; color: #e2e8f0; font-family: 'Inter', sans-serif; }
+        canvas { display: block; outline: none; }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(51, 65, 85, 0.5);
+        }
+    </style>
+    <!-- Import map for Three.js modules -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
+</head>
+<body>
+
+    <!-- UI Overlay -->
+    <div class="absolute top-0 left-0 w-full h-full pointer-events-none flex flex-col md:flex-row">
+        
+        <!-- Sidebar Controls -->
+        <div class="pointer-events-auto w-full md:w-80 h-auto md:h-full glass-panel p-6 overflow-y-auto flex flex-col gap-5 z-10 transition-transform duration-300" id="sidebar">
+            
+            <div class="border-b border-slate-700 pb-4">
+                <h1 class="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Atraktor Lorenza</h1>
+                <div class="text-xs text-slate-400 font-mono mt-2">
+                    dx/dt = &sigma;(y - x)<br>
+                    dy/dt = x(&rho; - z) - y<br>
+                    dz/dt = xy - &beta;z
+                </div>
+            </div>
+
+            <!-- Parameters -->
+            <div class="space-y-4">
+                <h3 class="text-xs font-bold text-cyan-500 uppercase tracking-widest">Parametry Układu</h3>
+                
+                <!-- Sigma -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1 text-slate-300">
+                        <span>Sigma (&sigma;) - Lepkość</span>
+                        <span id="sigma-val" class="font-mono text-cyan-400">10.0</span>
+                    </div>
+                    <input type="range" id="sigma" min="0" max="50" step="0.1" value="10" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                </div>
+
+                <!-- Rho -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1 text-slate-300">
+                        <span>Rho (&rho;) - Liczba Rayleigha</span>
+                        <span id="rho-val" class="font-mono text-cyan-400">28.0</span>
+                    </div>
+                    <input type="range" id="rho" min="0" max="100" step="0.1" value="28" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                </div>
+
+                <!-- Beta -->
+                <div>
+                    <div class="flex justify-between text-xs mb-1 text-slate-300">
+                        <span>Beta (&beta;) - Aspekt geometryczny</span>
+                        <span id="beta-val" class="font-mono text-cyan-400">2.67</span>
+                    </div>
+                    <input type="range" id="beta" min="0" max="10" step="0.01" value="2.666" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                </div>
+            </div>
+
+            <!-- Simulation Settings -->
+            <div class="space-y-4 pt-4 border-t border-slate-700">
+                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Symulacja</h3>
+                
+                <div>
+                    <div class="flex justify-between text-xs mb-1 text-slate-300">
+                        <span>Szybkość czasu (dt)</span>
+                        <span id="speed-val" class="font-mono text-cyan-400">0.005</span>
+                    </div>
+                    <input type="range" id="speed" min="0.001" max="0.03" step="0.001" value="0.005" class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                </div>
+
+                <div class="flex items-center gap-3 mt-4">
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="swarm-mode" class="sr-only peer">
+                        <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
+                        <span class="ml-3 text-xs font-medium text-slate-300">Tryb Roju (50 pkt)</span>
+                    </label>
+                </div>
+                
+                 <div class="flex items-center gap-3">
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="auto-rotate" checked class="sr-only peer">
+                        <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                        <span class="ml-3 text-xs font-medium text-slate-300">Auto-obrót kamery</span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mt-auto pt-6">
+                <button id="reset-btn" class="w-full py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-cyan-400 text-sm font-semibold transition-all flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 12"/><path d="M21 3v9h-9"/></svg>
+                    Restart Symulacji
+                </button>
+            </div>
+        </div>
+
+        <!-- Info Overlay (Bottom Right) -->
+        <div class="hidden md:block absolute bottom-6 right-6 pointer-events-none text-right">
+            <div class="glass-panel px-4 py-2 rounded-lg text-xs text-slate-400 font-mono">
+                <div>Sterowanie:</div>
+                <div>LPM: Obrót</div>
+                <div>PPM: Przesunięcie</div>
+                <div>Scroll: Zoom</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3D Canvas Container -->
+    <div id="canvas-container" class="w-full h-screen bg-slate-950"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Configuration ---
+        const config = {
+            sigma: 10.0,
+            rho: 28.0,
+            beta: 8/3,
+            dt: 0.005,
+            trailLength: 2000, // Points per trail
+            swarmSize: 50,
+            isSwarm: false,
+            autoRotate: true
+        };
+
+        // --- Scene Setup ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020617, 0.002); // Distance fog for depth
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 40, 80);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setClearColor(0x020617);
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.autoRotate = config.autoRotate;
+        controls.autoRotateSpeed = 1.0;
+
+        // --- Objects ---
+
+        // Helper to generate initial state
+        function getInitialState(spread = 0.1) {
+            return {
+                x: 0.1 + (Math.random() - 0.5) * spread,
+                y: 0 + (Math.random() - 0.5) * spread,
+                z: 0 + (Math.random() - 0.5) * spread
+            };
+        }
+
+        // Particle Class
+        class Particle {
+            constructor(color, spread = 0.1) {
+                this.reset(spread);
+                
+                // Geometry for trail
+                this.maxPoints = config.trailLength;
+                this.positions = new Float32Array(this.maxPoints * 3);
+                this.colors = new Float32Array(this.maxPoints * 3);
+                
+                // Initialize positions off-screen to avoid glitches
+                for(let i=0; i<this.maxPoints * 3; i++) this.positions[i] = 0;
+
+                this.geometry = new THREE.BufferGeometry();
+                this.geometry.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
+                this.geometry.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
+                
+                // Material
+                this.material = new THREE.LineBasicMaterial({
+                    vertexColors: true,
+                    linewidth: 1, // Note: WebGL limitation often forces 1px width
+                    opacity: 0.8,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending
+                });
+
+                this.line = new THREE.Line(this.geometry, this.material);
+                
+                // Head (glowing sphere)
+                const sphereGeo = new THREE.SphereGeometry(0.3, 8, 8);
+                const sphereMat = new THREE.MeshBasicMaterial({ color: color });
+                this.head = new THREE.Mesh(sphereGeo, sphereMat);
+                
+                scene.add(this.line);
+                scene.add(this.head);
+
+                this.ptr = 0; // Ring buffer pointer
+                this.pointCount = 0;
+            }
+
+            reset(spread = 0.1) {
+                const init = getInitialState(spread);
+                this.x = init.x;
+                this.y = init.y;
+                this.z = init.z;
+                
+                // Clear trail
+                if (this.geometry) {
+                    this.positions.fill(0);
+                    this.pointCount = 0;
+                    this.ptr = 0;
+                    this.geometry.attributes.position.needsUpdate = true;
+                }
+            }
+
+            update() {
+                // Physics Step (Euler)
+                // dx/dt = sigma * (y - x)
+                // dy/dt = x * (rho - z) - y
+                // dz/dt = x * y - beta * z
+                
+                const dx = (config.sigma * (this.y - this.x)) * config.dt;
+                const dy = (this.x * (config.rho - this.z) - this.y) * config.dt;
+                const dz = (this.x * this.y - config.beta * this.z) * config.dt;
+
+                this.x += dx;
+                this.y += dy;
+                this.z += dz;
+
+                // Update Head Position
+                this.head.position.set(this.x, this.y, this.z);
+
+                // Update Trail Ring Buffer
+                // To simulate a moving snake, we need to shift data or use a cyclic buffer.
+                // For Three.js lines, shifting a Float32Array is computationally expensive.
+                // A better visual trick for "snake" is hard. 
+                // Let's implement a growing trail that overwrites old data if it gets too long,
+                // effectively acting like a history buffer.
+                
+                // Shift data manually (simplest for visual consistency even if O(N))
+                // For 2000 points it's fast enough in JS.
+                for (let i = this.maxPoints - 1; i > 0; i--) {
+                    this.positions[i * 3] = this.positions[(i - 1) * 3];
+                    this.positions[i * 3 + 1] = this.positions[(i - 1) * 3 + 1];
+                    this.positions[i * 3 + 2] = this.positions[(i - 1) * 3 + 2];
+                    
+                    // Colors
+                    this.colors[i * 3] = this.colors[(i - 1) * 3];
+                    this.colors[i * 3 + 1] = this.colors[(i - 1) * 3 + 1];
+                    this.colors[i * 3 + 2] = this.colors[(i - 1) * 3 + 2];
+                }
+
+                // Add new point at index 0
+                this.positions[0] = this.x;
+                this.positions[1] = this.y;
+                this.positions[2] = this.z;
+
+                // Calculate color based on speed/position
+                const speed = Math.sqrt(dx*dx + dy*dy + dz*dz) / config.dt;
+                // Hue based on Z height or speed? Let's do speed to show acceleration near attractor center
+                // Normalize speed approx 0 to 40
+                const hue = 0.5 + (speed / 50); // Shifts from Cyan to Blue/Purple
+                const color = new THREE.Color().setHSL(hue % 1, 1.0, 0.5);
+
+                this.colors[0] = color.r;
+                this.colors[1] = color.g;
+                this.colors[2] = color.b;
+
+                // Mark update
+                this.geometry.attributes.position.needsUpdate = true;
+                this.geometry.attributes.color.needsUpdate = true;
+                
+                // Only draw count number of points initially until full
+                if(this.pointCount < this.maxPoints) {
+                    this.pointCount++;
+                    this.geometry.setDrawRange(0, this.pointCount);
+                }
+            }
+
+            dispose() {
+                scene.remove(this.line);
+                scene.remove(this.head);
+                this.geometry.dispose();
+                this.material.dispose();
+            }
+        }
+
+        let particles = [];
+
+        function initParticles() {
+            // Clean up
+            particles.forEach(p => p.dispose());
+            particles = [];
+
+            const count = config.isSwarm ? config.swarmSize : 1;
+            // Spread determines how close they start. Swarm needs very tight packing to show divergence.
+            const spread = config.isSwarm ? 0.5 : 0.1; 
+
+            for (let i = 0; i < count; i++) {
+                // If single, cyan. If swarm, slight variations.
+                const p = new Particle(0x22d3ee, spread);
+                // Swarm specific: shorten tail to maintain performance and visual clarity
+                if(config.isSwarm) {
+                     p.maxPoints = 500; 
+                     // Re-alloc buffer if changed (lazy here, class handles default but...)
+                     // Let's just create new particles.
+                }
+                particles.push(p);
+            }
+        }
+
+        // --- Interaction Logic ---
+        const inputs = ['sigma', 'rho', 'beta', 'speed'];
+        inputs.forEach(id => {
+            const el = document.getElementById(id);
+            const valEl = document.getElementById(id + '-val');
+            el.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                // Map input id to config key (handle 'speed' -> 'dt')
+                const key = id === 'speed' ? 'dt' : id;
+                config[key] = val;
+                valEl.textContent = val.toFixed(id === 'speed' ? 3 : 2);
+            });
+        });
+
+        document.getElementById('swarm-mode').addEventListener('change', (e) => {
+            config.isSwarm = e.target.checked;
+            initParticles();
+        });
+
+        document.getElementById('auto-rotate').addEventListener('change', (e) => {
+            config.autoRotate = e.target.checked;
+            controls.autoRotate = config.autoRotate;
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            initParticles();
+        });
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            particles.forEach(p => p.update());
+            
+            // Adjust camera focus center slightly to follow "center of mass" of attractor approx (0,0,25)
+            controls.target.set(0, 0, 25);
+            controls.update();
+            
+            renderer.render(scene, camera);
+        }
+
+        // --- Resize Handling ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start
+        initParticles();
+        animate();
+
+    </script>
+</body>
+</html>
